@@ -4,21 +4,36 @@ Cross-platform tray app (Linux, macOS, Windows) showing your Claude plan limits 
 
 Based on [gnome-claude-usage](https://github.com/naueramant/gnome-claude-usage) by Jonas Tranberg, which does the same as a GNOME Shell extension. This project ports the idea to a standalone Tauri 2 app so it works on any desktop.
 
-Status: early scaffold. The tray icon and popup shell exist; limits, cost and heatmap are not implemented yet.
+Status: early. The tray icon and an empty popup exist, and the core can read Claude Code's login and fetch your limits. The popup does not show them yet, and cost and heatmap are not implemented.
 
 ## Design
 
 - Tauri 2 (Rust). The popup webview is created when you click the tray icon and destroyed when it loses focus, so nothing but the small Rust tray process runs while idle.
 - Reads the OAuth credentials Claude Code already stores locally, and your Claude Code transcripts under `~/.claude/projects`. Nothing leaves your machine except the request to Anthropic's usage endpoint.
 
+Layout: `crates/core` is the UI-free library (credentials, usage API client) plus a small CLI; `src-tauri` and `src` are the tray app.
+
 ## Development
 
-Requires Rust (pinned in `rust-toolchain.toml`), Node and pnpm.
+Requires Rust (pinned in `rust-toolchain.toml`), Node and pnpm. On Linux the tray app also needs Tauri's system packages, see the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
+
+Test the core without any GUI dependencies. You must be signed in to Claude Code (`claude`) and the token must not have expired, which it does a few hours after Claude Code last ran:
+
+```bash
+cargo run -p claude-usage-core --bin claude-usage-cli
+cargo test --workspace
+```
+
+It prints your plan, how long the token is valid and each limit. Credentials come from the macOS Keychain on macOS, or from `.credentials.json` in `~/.config/claude` or `~/.claude` elsewhere (override with `--config-dir` or `CLAUDE_CONFIG_DIR`). The tool only reads them and never refreshes the token.
+
+Run the tray app:
 
 ```bash
 pnpm install
 pnpm tauri dev
 ```
+
+On Linux, clicks on the tray icon are not reported to the app, so open the popup from the tray menu ("Show usage"). GNOME also needs an AppIndicator extension to show the tray icon at all.
 
 ## Licence
 

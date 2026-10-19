@@ -1,0 +1,14 @@
+[package]
+name = "claude-usage-core"
+version = "0.1.0"
+description = "Credentials, usage API client and transcript scanning for claude-usage"
+authors = ["Dion Jensen"]
+license = "GPL-2.0-or-later"
+edition = "2024"
+rust-version = "1.99"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ureq = { version = "3.4", features = ["json"] }

@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = ["src-tauri", "crates/core"]
+
+# Slim tray app: optimise for size (https://tauri.app/concept/size/).
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
