@@ -4,7 +4,9 @@ Cross-platform tray app (Linux, macOS, Windows) showing your Claude plan limits 
 
 Based on [gnome-claude-usage](https://github.com/naueramant/gnome-claude-usage) by Jonas Tranberg, which does the same as a GNOME Shell extension. This project ports the idea to a standalone Tauri 2 app so it works on any desktop.
 
-Status: early. The tray icon and an empty popup exist, and the core can read Claude Code's login and fetch your limits. The popup does not show them yet, and cost and heatmap are not implemented.
+Status: early but usable on macOS. The tray ring and popup show your limits, what the last 30 days would have cost at API prices against your plan, and an activity heatmap. Settings are in the popup (gear icon). Linux and Windows are untested.
+
+Not ported from the original yet: the token house, custom accent colour and tray placement.
 
 ## Design
 
@@ -21,6 +23,7 @@ Test the core without any GUI dependencies. You must be signed in to Claude Code
 
 ```bash
 cargo run -p claude-usage-core --bin claude-usage-cli
+cargo run -p claude-usage-core --bin claude-usage-cli -- --scan   # cost and activity from ~/.claude, no login needed
 cargo test --workspace
 ```
 

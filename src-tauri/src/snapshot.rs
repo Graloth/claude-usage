@@ -7,6 +7,8 @@ use claude_usage_core::{
 };
 use serde::Serialize;
 
+use crate::settings::TrayLimit;
+
 /// Percent of a limit at which the ring turns yellow / red.
 pub const WARNING_PERCENT: f64 = 75.0;
 pub const CRITICAL_PERCENT: f64 = 90.0;
@@ -165,11 +167,26 @@ impl Snapshot {
         self.problem.is_some()
     }
 
-    /// The most constrained limit: what the tray ring shows.
+    /// The most constrained limit.
     pub fn headline(&self) -> Option<&LimitView> {
         self.limits
             .iter()
             .max_by(|a, b| a.percent.total_cmp(&b.percent))
+    }
+
+    /// The limit the tray ring shows, per the user's choice. Falls back to the
+    /// most constrained one when the chosen limit is not in the data.
+    pub fn tray_limit(&self, which: TrayLimit) -> Option<&LimitView> {
+        let chosen = match which {
+            TrayLimit::MostConstrained => None,
+            TrayLimit::Session => self.limits.iter().find(|l| l.kind == "session"),
+            TrayLimit::Weekly => self
+                .limits
+                .iter()
+                .find(|l| l.kind == "weekly_all")
+                .or_else(|| self.limits.iter().find(|l| l.kind.starts_with("weekly"))),
+        };
+        chosen.or_else(|| self.headline())
     }
 }
 
@@ -219,6 +236,29 @@ mod tests {
             1,
         );
         assert_eq!(snapshot.headline().unwrap().kind, "weekly_all");
+    }
+
+    #[test]
+    fn tray_limit_follows_the_choice_and_falls_back() {
+        let mut snapshot = Snapshot::default();
+        snapshot.record_success(
+            &[
+                limit("session", 51.0, None),
+                limit("weekly_all", 90.0, None),
+            ],
+            1,
+        );
+        let kind = |which| snapshot.tray_limit(which).unwrap().kind.clone();
+        assert_eq!(kind(TrayLimit::MostConstrained), "weekly_all");
+        assert_eq!(kind(TrayLimit::Session), "session");
+        assert_eq!(kind(TrayLimit::Weekly), "weekly_all");
+
+        let mut only_session = Snapshot::default();
+        only_session.record_success(&[limit("session", 5.0, None)], 1);
+        assert_eq!(
+            only_session.tray_limit(TrayLimit::Weekly).unwrap().kind,
+            "session"
+        );
     }
 
     #[test]

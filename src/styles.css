@@ -2,6 +2,7 @@
   color-scheme: dark;
   --bg: #1b1b1f;
   --track: #2c2c33;
+  --border: #3a3a43;
   --fg: #ececf1;
   --muted: #9a9aa6;
   --accent: #d97757;
@@ -14,11 +15,11 @@
   line-height: 1.5;
 }
 
+/* The window is transparent; the rounded panel below is what you see. */
 html,
 body {
   margin: 0;
-  height: 100%;
-  background: var(--bg);
+  background: transparent;
   color: var(--fg);
   /* The popup is a tray widget: no text selection, no rubber-banding. */
   user-select: none;
@@ -26,6 +27,16 @@ body {
 }
 
 .panel {
+  box-sizing: border-box;
+  max-height: 100vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* Natural height of the content: what the window is sized to. */
+.stack {
   padding: 16px;
 }
 
@@ -128,4 +139,248 @@ footer {
 
 footer {
   margin-top: 16px;
+}
+
+header .actions {
+  display: flex;
+  gap: 2px;
+}
+
+.sections {
+  display: grid;
+  gap: 18px;
+}
+
+.section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Settings form */
+.settings {
+  display: grid;
+  gap: 14px;
+}
+
+fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+label {
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--track);
+  color: var(--fg);
+  font: inherit;
+}
+
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+.hint:empty {
+  display: none;
+}
+
+.section-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.move-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+button.move {
+  font-size: 13px;
+  padding: 2px 8px;
+}
+
+button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Value */
+.value-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.value-amount {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.value-plan,
+.tokens {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.stack-bar {
+  display: flex;
+  height: 8px;
+  margin: 10px 0 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--track);
+}
+
+.slice {
+  width: calc(var(--w) * 1%);
+  background: var(--c);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--c);
+}
+
+/* Heatmap */
+.heatmap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.heatmap-head .section-title {
+  margin: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+}
+
+button.tab {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+button.tab.active {
+  background: var(--track);
+  color: var(--fg);
+}
+
+.grid {
+  display: grid;
+  gap: 3px;
+}
+
+/* Weeks run down the columns, Monday at the top. */
+.grid.days {
+  grid-template-rows: repeat(7, 14px);
+  grid-auto-flow: column;
+  grid-auto-columns: 14px;
+}
+
+.grid.hours {
+  grid-template-columns: repeat(24, 1fr);
+}
+
+.grid.hours .cell {
+  aspect-ratio: 1;
+}
+
+.cell {
+  border-radius: 3px;
+  background: var(--track);
+}
+
+.cell.blank {
+  background: transparent;
+}
+
+.cell.l1 { background: rgba(217, 119, 87, 0.3); }
+.cell.l2 { background: rgba(217, 119, 87, 0.55); }
+.cell.l3 { background: rgba(217, 119, 87, 0.8); }
+.cell.l4 { background: rgb(217, 119, 87); }
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.stat {
+  display: flex;
+  justify-content: space-between;
 }

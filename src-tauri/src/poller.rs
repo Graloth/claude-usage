@@ -18,8 +18,11 @@ use claude_usage_core::{
     usage::{self, Limit, UsageError},
 };
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 
 use crate::{
+    notify::NotifyState,
+    settings::{Settings, SettingsStore},
     snapshot::{Problem, Snapshot},
     tray,
 };
@@ -27,8 +30,6 @@ use crate::{
 /// Event the popup listens to; carries the new [`Snapshot`].
 pub const UPDATED_EVENT: &str = "usage-updated";
 
-/// Normal refresh interval.
-const POLL_INTERVAL: Duration = Duration::from_secs(300);
 /// Retry interval while the sign-in is missing or expired. Reading the login
 /// is local and cheap, and this picks up a renewal by Claude Code soon after.
 const LOGIN_RETRY: Duration = Duration::from_secs(60);
@@ -52,7 +53,8 @@ impl Shared {
             .map_or_else(|poisoned| poisoned.into_inner().clone(), |s| s.clone())
     }
 
-    /// Asks the poller to refresh now (still subject to `MIN_REQUEST_GAP`).
+    /// Asks the poller to refresh now (still subject to `MIN_REQUEST_GAP`). Also
+    /// makes it re-read the settings, so a changed interval takes effect at once.
     pub fn refresh(&self) {
         // The receiver only disappears when the app is shutting down.
         let _ = self.wake.send(());
@@ -76,12 +78,17 @@ pub fn start(app: &AppHandle) {
 
 fn run(app: &AppHandle, requests: &Receiver<()>) {
     let client = usage::Client::new();
-    let dirs = credentials::config_dirs(None);
     let mut last_request: Option<Instant> = None;
+    let mut notifications = NotifyState::default();
 
     loop {
-        let (result, delay) = poll_once(&client, &dirs, &mut last_request);
-        publish(app, result);
+        // Re-read each round so settings changes apply without a restart.
+        let settings = app.state::<SettingsStore>().get();
+        let dirs = credentials::config_dirs(settings.claude_config_dir.as_deref());
+        let interval = Duration::from_secs(u64::from(settings.refresh_minutes) * 60);
+
+        let (result, delay) = poll_once(&client, &dirs, &mut last_request, interval);
+        publish(app, result, &settings, &mut notifications);
 
         match requests.recv_timeout(delay) {
             // A refresh was requested: poll again now.
@@ -97,6 +104,7 @@ fn poll_once(
     client: &usage::Client,
     dirs: &[std::path::PathBuf],
     last_request: &mut Option<Instant>,
+    interval: Duration,
 ) -> (Result<Vec<Limit>, Problem>, Duration) {
     let creds = match credentials::load(dirs) {
         Ok(creds) => creds,
@@ -113,23 +121,31 @@ fn poll_once(
     *last_request = Some(Instant::now());
 
     match client.fetch_usage(&creds) {
-        Ok(usage) => (Ok(usage.limits()), POLL_INTERVAL),
-        Err(e) => (Err(Problem::from_usage(&e)), retry_delay(&e)),
+        Ok(usage) => (Ok(usage.limits()), interval),
+        Err(e) => (Err(Problem::from_usage(&e)), retry_delay(&e, interval)),
     }
 }
 
-fn retry_delay(error: &UsageError) -> Duration {
+/// How long to wait after a failed request. `interval` is the user's normal
+/// refresh interval.
+fn retry_delay(error: &UsageError, interval: Duration) -> Duration {
     match error {
         UsageError::RateLimited { retry_after } => retry_after
-            .unwrap_or(POLL_INTERVAL)
+            .unwrap_or(interval)
             .clamp(MIN_RETRY_AFTER, MAX_RETRY_AFTER),
         UsageError::Unauthorized | UsageError::Transport(_) => ERROR_RETRY,
-        UsageError::Status(_) | UsageError::Parse(_) => POLL_INTERVAL,
+        UsageError::Status(_) | UsageError::Parse(_) => interval,
     }
 }
 
-fn publish(app: &AppHandle, result: Result<Vec<Limit>, Problem>) {
+fn publish(
+    app: &AppHandle,
+    result: Result<Vec<Limit>, Problem>,
+    settings: &Settings,
+    notifications: &mut NotifyState,
+) {
     let shared = app.state::<Shared>();
+    let fresh = result.is_ok();
     let snapshot = {
         let mut guard = shared
             .snapshot
@@ -142,9 +158,24 @@ fn publish(app: &AppHandle, result: Result<Vec<Limit>, Problem>) {
         guard.clone()
     };
 
-    tray::apply(app, &snapshot);
+    tray::apply(app, &snapshot, settings);
     if let Err(e) = app.emit(UPDATED_EVENT, &snapshot) {
         eprintln!("claude-usage: could not notify the popup: {e}");
+    }
+
+    // Only fresh data can trigger notifications; stale values never do.
+    if fresh {
+        for note in notifications.observe(&snapshot.limits, settings) {
+            if let Err(e) = app
+                .notification()
+                .builder()
+                .title(&note.title)
+                .body(&note.body)
+                .show()
+            {
+                eprintln!("claude-usage: could not show notification: {e}");
+            }
+        }
     }
 }
 
@@ -158,23 +189,34 @@ fn now_ms() -> i64 {
 mod tests {
     use super::*;
 
+    const INTERVAL: Duration = Duration::from_secs(300);
+
     #[test]
     fn rate_limit_waits_as_long_as_asked_within_bounds() {
         let delay = |secs: Option<u64>| {
-            retry_delay(&UsageError::RateLimited {
-                retry_after: secs.map(Duration::from_secs),
-            })
+            retry_delay(
+                &UsageError::RateLimited {
+                    retry_after: secs.map(Duration::from_secs),
+                },
+                INTERVAL,
+            )
         };
         assert_eq!(delay(Some(600)), Duration::from_secs(600));
         assert_eq!(delay(Some(1)), MIN_RETRY_AFTER);
         assert_eq!(delay(Some(86_400)), MAX_RETRY_AFTER);
-        assert_eq!(delay(None), POLL_INTERVAL);
+        assert_eq!(delay(None), INTERVAL);
     }
 
     #[test]
     fn other_errors_retry_sooner_or_at_the_normal_pace() {
-        assert_eq!(retry_delay(&UsageError::Unauthorized), ERROR_RETRY);
-        assert_eq!(retry_delay(&UsageError::Transport("x".into())), ERROR_RETRY);
-        assert_eq!(retry_delay(&UsageError::Status(500)), POLL_INTERVAL);
+        assert_eq!(
+            retry_delay(&UsageError::Unauthorized, INTERVAL),
+            ERROR_RETRY
+        );
+        assert_eq!(
+            retry_delay(&UsageError::Transport("x".into()), INTERVAL),
+            ERROR_RETRY
+        );
+        assert_eq!(retry_delay(&UsageError::Status(500), INTERVAL), INTERVAL);
     }
 }

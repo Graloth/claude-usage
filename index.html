@@ -11,15 +11,82 @@
 
   <body>
     <main class="panel">
-      <header>
-        <h1>Claude usage</h1>
-        <button id="refresh" type="button" title="Refresh now" aria-label="Refresh now">↻</button>
-      </header>
+      <div id="stack" class="stack">
+        <header>
+          <h1 id="title">Claude usage</h1>
+          <div class="actions">
+            <button id="refresh" type="button" title="Refresh now" aria-label="Refresh now">↻</button>
+            <button id="settings-toggle" type="button" title="Settings" aria-label="Settings">⚙</button>
+          </div>
+        </header>
 
-      <p id="banner" class="banner" role="status" hidden></p>
-      <p id="empty" class="muted" hidden>Loading…</p>
-      <ul id="limits" class="limits"></ul>
-      <footer id="updated" class="muted"></footer>
+        <div id="main-view">
+          <p id="banner" class="banner" role="status" hidden></p>
+          <div id="sections" class="sections"></div>
+          <footer id="updated" class="muted"></footer>
+        </div>
+
+        <form id="settings-view" class="settings" hidden>
+          <fieldset>
+            <legend>Account</legend>
+            <label>Claude config directory
+              <input id="s-config-dir" type="text" placeholder="Auto-detect" spellcheck="false" />
+            </label>
+            <label>Monthly plan price (USD)
+              <input id="s-plan-price" type="number" min="0" step="1" placeholder="Auto-detect" />
+            </label>
+            <label>Refresh every (minutes, 2–60)
+              <input id="s-refresh" type="number" min="2" max="60" step="1" />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Top bar</legend>
+            <label>Limit shown
+              <select id="s-tray-limit">
+                <option value="most_constrained">Most constrained</option>
+                <option value="session">Current session</option>
+                <option value="weekly">Weekly, all models</option>
+              </select>
+            </label>
+            <label class="check"><input id="s-tray-percent" type="checkbox" />Show the percentage next to the ring</label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Panel</legend>
+            <ul id="s-sections" class="section-list"></ul>
+          </fieldset>
+
+          <fieldset>
+            <legend>Cost</legend>
+            <label>Currency
+              <select id="s-currency">
+                <option>USD</option><option>EUR</option><option>GBP</option>
+                <option>DKK</option><option>SEK</option><option>NOK</option>
+              </select>
+            </label>
+            <label>Exchange rate (units per 1 USD)
+              <input id="s-rate" type="number" min="0.0001" step="any" />
+            </label>
+            <p id="s-rate-hint" class="hint"></p>
+            <label>Heatmap shows
+              <select id="s-metric">
+                <option value="cost">Cost</option>
+                <option value="tokens">Tokens</option>
+              </select>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Alerts</legend>
+            <label class="check"><input id="s-notify-warning" type="checkbox" />Warn when a limit nears its end</label>
+            <label>Warning threshold (%)
+              <input id="s-threshold" type="number" min="1" max="100" step="1" />
+            </label>
+            <label class="check"><input id="s-notify-reset" type="checkbox" />Notify when a limit resets</label>
+          </fieldset>
+        </form>
+      </div>
     </main>
   </body>
 </html>

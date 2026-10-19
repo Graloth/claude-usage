@@ -4,6 +4,7 @@ use tauri::{AppHandle, image::Image};
 
 use crate::{
     ring::{self, Rgb},
+    settings::Settings,
     snapshot::{Level, Snapshot},
 };
 
@@ -26,8 +27,8 @@ pub struct TrayView {
     pub tooltip: String,
 }
 
-pub fn view(snapshot: &Snapshot) -> TrayView {
-    let Some(headline) = snapshot.headline() else {
+pub fn view(snapshot: &Snapshot, settings: &Settings) -> TrayView {
+    let Some(headline) = snapshot.tray_limit(settings.tray_limit) else {
         return TrayView {
             fraction: 0.0,
             color: GREY,
@@ -52,7 +53,9 @@ pub fn view(snapshot: &Snapshot) -> TrayView {
     TrayView {
         fraction: (headline.percent / 100.0) as f32,
         color,
-        title: Some(format!("{:.0}%", headline.percent)),
+        title: settings
+            .show_tray_percent
+            .then(|| format!("{:.0}%", headline.percent)),
         tooltip,
     }
 }
@@ -67,11 +70,11 @@ pub fn icon(view: &TrayView) -> Image<'static> {
 
 /// Updates the tray to match `snapshot`. Failures are logged, not fatal: a
 /// stale tray is better than a crashed poller.
-pub fn apply(app: &AppHandle, snapshot: &Snapshot) {
+pub fn apply(app: &AppHandle, snapshot: &Snapshot, settings: &Settings) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let view = view(snapshot);
+    let view = view(snapshot, settings);
     let results = [
         tray.set_icon(Some(icon(&view))),
         tray.set_tooltip(Some(&view.tooltip)),
@@ -98,7 +101,7 @@ mod tests {
         let colour_at = |percent| {
             let mut snapshot = Snapshot::default();
             snapshot.record_success(&[limit(percent)], 0);
-            view(&snapshot).color
+            view(&snapshot, &Settings::default()).color
         };
         assert_eq!(colour_at(10.0), ORANGE);
         assert_eq!(colour_at(80.0), YELLOW);
@@ -111,7 +114,7 @@ mod tests {
         snapshot.record_success(&[limit(95.0)], 0);
         snapshot.record_problem(Problem::expired());
 
-        let view = view(&snapshot);
+        let view = view(&snapshot, &Settings::default());
         assert_eq!(view.color, GREY);
         assert_eq!(view.title.as_deref(), Some("95%"));
         assert!((view.fraction - 0.95).abs() < 1e-6);
@@ -122,13 +125,28 @@ mod tests {
     #[test]
     fn no_data_shows_an_empty_grey_ring_with_the_reason() {
         let mut snapshot = Snapshot::default();
-        assert!(view(&snapshot).tooltip.contains("loading"));
+        assert!(
+            view(&snapshot, &Settings::default())
+                .tooltip
+                .contains("loading")
+        );
 
         snapshot.record_problem(Problem::expired());
-        let view = view(&snapshot);
+        let view = view(&snapshot, &Settings::default());
         assert_eq!(view.color, GREY);
         assert_eq!(view.title, None);
         assert_eq!(view.fraction, 0.0);
         assert!(view.tooltip.contains("expired"));
+    }
+
+    #[test]
+    fn percent_text_can_be_switched_off() {
+        let mut snapshot = Snapshot::default();
+        snapshot.record_success(&[limit(40.0)], 0);
+        let settings = Settings {
+            show_tray_percent: false,
+            ..Settings::default()
+        };
+        assert_eq!(view(&snapshot, &settings).title, None);
     }
 }
