@@ -11,9 +11,9 @@ Not ported from the original yet: the token house, custom accent colour and tray
 ## Design
 
 - Tauri 2 (Rust). The popup webview is created when you click the tray icon and destroyed when it loses focus, so nothing but the small Rust tray process runs while idle.
-- Reads the OAuth credentials Claude Code already stores locally, and your Claude Code transcripts under `~/.claude/projects`. Nothing leaves your machine except the request to Anthropic's usage endpoint.
+- Reads the OAuth credentials Claude Code already stores locally, and your Claude Code transcripts under `~/.claude/projects`. Nothing leaves your machine except requests to Anthropic's usage and profile endpoints (the profile one only to detect your plan).
 
-Layout: `crates/core` is the UI-free library (credentials, usage API client) plus a small CLI; `src-tauri` and `src` are the tray app.
+Layout: `crates/core` is the UI-free library (credentials, usage API client, transcript scanner, pricing, plan detection) plus a small CLI; `src-tauri` and `src` are the tray app.
 
 ## Development
 
