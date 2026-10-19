@@ -22,12 +22,49 @@ jobs:
     permissions:
       contents: read
 
+  # The draft release is created once, here, and the builds upload to it by id.
+  # Letting each matrix job create it races: the first real release produced
+  # two drafts for one tag, with the installers split between them.
+  draft:
+    name: Create draft release
+    needs: ci
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - name: Create the draft
+        id: create
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A leftover draft from an earlier attempt would make a second one.
+          existing=$(gh api --paginate "repos/$REPO/releases" --jq '.[] | select(.tag_name == env.TAG) | .id')
+          if [ -n "$existing" ]; then
+            echo "A release for $TAG already exists (id $existing). Delete it, and the tag if needed, before retrying." >&2
+            exit 1
+          fi
+          prerelease=false
+          [[ "$TAG" == *-* ]] && prerelease=true
+          release_id=$(gh api "repos/$REPO/releases" \
+            -f tag_name="$TAG" -f name="Claude Usage ${TAG#v}" \
+            -F draft=true -F prerelease="$prerelease" -F generate_release_notes=true \
+            --jq .id)
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build (${{ matrix.name }})
-    needs: ci
+    needs: [ci, draft]
+    # The tests must have passed. The draft job only exists for tags; a manual
+    # dry run skips it and builds without a release.
+    if: ${{ !cancelled() && needs.ci.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.draft.result) }}
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write # create the release and upload assets
+      contents: write # upload assets to the draft release
       id-token: write # sign build provenance attestations
       attestations: write
     strategy:
@@ -110,12 +147,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Omitting tagName and releaseName makes the action build only.
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: ${{ github.ref_type == 'tag' && 'Claude Usage __VERSION__' || '' }}
-          releaseDraft: true
-          prerelease: ${{ github.ref_type == 'tag' && contains(github.ref_name, '-') }}
-          generateReleaseNotes: true
+          # Omitting releaseId makes the action build only (the dry run).
+          releaseId: ${{ needs.draft.outputs.release_id }}
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           # No in-app updater yet, so no updater manifest or signatures.
           uploadUpdaterJson: false

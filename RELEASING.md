@@ -12,11 +12,13 @@ Releases are built by GitHub Actions on macOS, Linux (x86_64 and arm64) and Wind
 4. `scripts/release.sh tag 0.2.0` checks that `origin/main` now has that version and tags it. Review with `git show v0.2.0`, then start the release with `git push origin v0.2.0`.
 5. Pushing the tag starts the **Release** workflow:
    1. It runs the whole **CI** workflow (format, clippy, tests on Linux, macOS and Windows) on the tagged commit. **Nothing is built unless every one of those is green.**
-   2. It builds the installers on four runners and attaches them to a **draft** GitHub release with generated notes.
+   2. It creates one **draft** GitHub release with generated notes, then builds the installers on four runners and uploads them to it.
    3. It records a build provenance attestation for every installer.
 6. Open the draft on the Releases page, check the notes and installers, and publish it.
 
 A pre-release uses a numeric suffix: `scripts/release.sh prepare 0.2.0-1`. Any version with a hyphen is marked as a pre-release on GitHub. The suffix must be numeric (and at most 65535) because the Windows MSI installer cannot represent anything else.
+
+If a release run goes wrong, nothing is public yet (it is a draft). Delete the draft and, if the tag has to point at a different commit, the tag as well (the tag ruleset lets admins), then push the tag again. The workflow refuses to create a second release for a tag that already has one.
 
 ## Dry run
 
@@ -26,7 +28,7 @@ A pre-release uses a numeric suffix: `scripts/release.sh prepare 0.2.0-1`. Any v
 
 | Platform | Installers |
 | --- | --- |
-| macOS (universal: Apple Silicon and Intel) | `.dmg` |
+| macOS (universal: Apple Silicon and Intel) | `.dmg`, `.app.tar.gz` |
 | Linux x86_64 and arm64 | `.deb`, `.rpm`, `.AppImage` |
 | Windows x86_64 | `.msi`, `.exe` (NSIS, per-user install) |
 
