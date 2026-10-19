@@ -8,6 +8,18 @@ Status: early but usable on macOS. The tray ring and popup show your limits, wha
 
 Not ported from the original yet: the token house, custom accent colour and tray placement.
 
+## Install
+
+Download the installer for your system from the [Releases](https://github.com/Graloth/claude-usage/releases) page. You also need [Claude Code](https://docs.claude.com/en/docs/claude-code), signed in with your Claude account: the app reads its login.
+
+Builds are not signed with a paid developer certificate yet, so your system asks you to confirm the first launch:
+
+- **macOS:** open the `.dmg`, drag the app to Applications, then open it. If macOS refuses, go to System Settings → Privacy & Security and choose **Open Anyway**.
+- **Windows:** if SmartScreen blocks the installer, choose **More info → Run anyway**.
+- **Linux:** install the `.deb` or `.rpm`, or `chmod +x` the `.AppImage` and run it. GNOME needs the AppIndicator extension to show tray icons, and clicks on the tray icon are not reported on Linux, so open the popup from the tray menu ("Show usage").
+
+You can check that a download was built by this repository's workflow, see [RELEASING.md](RELEASING.md).
+
 ## Design
 
 - Tauri 2 (Rust). The popup webview is created when you click the tray icon and destroyed when it loses focus, so nothing but the small Rust tray process runs while idle.

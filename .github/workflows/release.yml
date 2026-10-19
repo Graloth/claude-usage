@@ -1,0 +1,124 @@
+name: Release
+
+# Push a tag like v0.2.0 to build every platform and attach the installers to
+# a draft GitHub release for review (see RELEASING.md). Tags with a hyphen,
+# such as v0.2.0-1, are marked as pre-releases.
+#
+# "Run workflow" from the Actions tab does a dry run: it builds everything and
+# uploads the installers as workflow artifacts, without creating a release.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Gate: format, lint and tests must pass on Linux, macOS and Windows for the
+  # exact commit being released. Nothing below runs unless every one is green.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: ci
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # create the release and upload assets
+      id-token: write # sign build provenance attestations
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (universal)
+            os: macos-latest
+            args: --target universal-apple-darwin
+          - name: Linux x86_64
+            os: ubuntu-24.04
+            args: ""
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            args: ""
+          - name: Windows x86_64
+            os: windows-latest
+            args: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install
+
+      - name: Add macOS targets for the universal binary
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build and publish
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing and notarisation. All empty until the repository has
+          # an Apple Developer account; the build then falls back to the ad-hoc
+          # signature from tauri.conf.json. See RELEASING.md.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          # Omitting tagName and releaseName makes the action build only.
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && 'Claude Usage __VERSION__' || '' }}
+          releaseDraft: true
+          prerelease: ${{ github.ref_type == 'tag' && contains(github.ref_name, '-') }}
+          generateReleaseNotes: true
+          uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
+          # No in-app updater yet, so no updater manifest or signatures.
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
+          args: ${{ matrix.args }}
+
+      # Provenance: lets anyone check an installer was built by this workflow
+      # from this commit (`gh attestation verify <file> --repo Graloth/claude-usage`).
+      - name: List installers
+        if: github.ref_type == 'tag'
+        id: installers
+        shell: bash
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          {
+            echo 'paths<<EOF'
+            echo "$ARTIFACT_PATHS" | jq -r '.[]' | sed 's#\\#/#g'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.installers.outputs.paths }}
