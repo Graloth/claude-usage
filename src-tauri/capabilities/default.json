@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the usage popup",
+  "windows": ["popup"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close"
+  ]
+}

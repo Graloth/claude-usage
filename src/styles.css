@@ -1,0 +1,36 @@
+:root {
+  color-scheme: dark;
+  --bg: #1b1b1f;
+  --fg: #ececf1;
+  --muted: #9a9aa6;
+  --accent: #d97757;
+
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  /* The popup is a tray widget: no text selection, no rubber-banding. */
+  user-select: none;
+  overflow: hidden;
+}
+
+.panel {
+  padding: 16px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
