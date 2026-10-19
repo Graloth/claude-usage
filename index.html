@@ -11,8 +11,15 @@
 
   <body>
     <main class="panel">
-      <h1>Claude usage</h1>
-      <p class="muted">No data yet.</p>
+      <header>
+        <h1>Claude usage</h1>
+        <button id="refresh" type="button" title="Refresh now" aria-label="Refresh now">↻</button>
+      </header>
+
+      <p id="banner" class="banner" role="status" hidden></p>
+      <p id="empty" class="muted" hidden>Loading…</p>
+      <ul id="limits" class="limits"></ul>
+      <footer id="updated" class="muted"></footer>
     </main>
   </body>
 </html>

@@ -1,14 +1,21 @@
+mod poller;
+mod ring;
+mod snapshot;
+mod tray;
+
 use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
 
 use tauri::{
-    AppHandle, Manager, PhysicalPosition, RunEvent, WebviewUrl, WebviewWindow,
+    AppHandle, Manager, PhysicalPosition, RunEvent, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+
+use crate::{poller::Shared, snapshot::Snapshot};
 
 const POPUP_LABEL: &str = "popup";
 const POPUP_SIZE: (f64, f64) = (380.0, 560.0);
@@ -76,7 +83,20 @@ fn toggle_popup(app: &AppHandle, anchor: Option<PhysicalPosition<f64>>) -> tauri
 
     place_popup(&window, anchor)?;
     window.show()?;
+    // Opening the popup is a good moment for fresher numbers; the poller still
+    // enforces its minimum gap between requests.
+    app.state::<Shared>().refresh();
     window.set_focus()
+}
+
+#[tauri::command]
+fn get_snapshot(shared: State<'_, Shared>) -> Snapshot {
+    shared.snapshot()
+}
+
+#[tauri::command]
+fn refresh_now(shared: State<'_, Shared>) {
+    shared.refresh();
 }
 
 /// Positions the popup next to `anchor`, kept inside the monitor's work area.
@@ -117,14 +137,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
 
-    TrayIconBuilder::with_id("main")
-        .icon(
-            app.default_window_icon()
-                .expect("bundle icons are configured in tauri.conf.json")
-                .clone(),
-        )
-        .icon_as_template(true)
-        .tooltip("Claude usage")
+    let initial = tray::view(&Snapshot::default());
+    TrayIconBuilder::with_id(tray::TRAY_ID)
+        .icon(tray::icon(&initial))
+        // The ring is coloured, so it must not be treated as a monochrome
+        // template image.
+        .icon_as_template(false)
+        .tooltip(&initial.tooltip)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -161,8 +180,10 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             build_tray(app.handle())?;
+            poller::start(app.handle());
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![get_snapshot, refresh_now])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {

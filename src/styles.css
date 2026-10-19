@@ -1,9 +1,13 @@
 :root {
   color-scheme: dark;
   --bg: #1b1b1f;
+  --track: #2c2c33;
   --fg: #ececf1;
   --muted: #9a9aa6;
   --accent: #d97757;
+  --warning: #e6b428;
+  --critical: #dc3c3c;
+  --stale: #7d7d88;
 
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
@@ -25,12 +29,103 @@ body {
   padding: 16px;
 }
 
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 h1 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 16px;
   color: var(--accent);
 }
 
+button {
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+button:hover,
+button:focus-visible {
+  background: var(--track);
+  color: var(--fg);
+}
+
 .muted {
   color: var(--muted);
+}
+
+.banner {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warning);
+  border-radius: 4px;
+  background: var(--track);
+  font-size: 13px;
+}
+
+.limits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.percent {
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  height: 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: calc(var(--pct) * 1%);
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+.fill.warning {
+  background: var(--warning);
+}
+
+.fill.critical {
+  background: var(--critical);
+}
+
+/* Last-known values: grey out everything so they are not mistaken for live. */
+.limits.stale .fill {
+  background: var(--stale);
+}
+
+.limits.stale .percent {
+  color: var(--muted);
+}
+
+.reset,
+footer {
+  font-size: 12px;
+}
+
+footer {
+  margin-top: 16px;
 }

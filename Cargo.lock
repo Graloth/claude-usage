@@ -332,6 +332,7 @@ dependencies = [
 name = "claude-usage"
 version = "0.1.0"
 dependencies = [
+ "claude-usage-core",
  "serde",
  "serde_json",
  "tauri",
