@@ -12,8 +12,8 @@ use std::{
 };
 
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder, WindowEvent,
+    AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, State, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 use crate::{poller::Shared, scan::ScanShared};
@@ -133,16 +133,15 @@ pub fn fit_popup(
     window.set_size(LogicalSize::new(POPUP_WIDTH, height))?;
 
     let scale = window.scale_factor()?;
-    place(
-        &window,
-        state.anchor(),
-        (POPUP_WIDTH * scale, height * scale),
-    )?;
-    if window.is_visible()? {
-        Ok(())
-    } else {
-        reveal(&window)
+    let size = (POPUP_WIDTH * scale, height * scale);
+    place(&window, state.anchor(), size)?;
+    if !window.is_visible()? {
+        reveal(&window)?;
+        // The OS ignores a position set on a window that has never been shown,
+        // so set it again now that it is.
+        place(&window, state.anchor(), size)?;
     }
+    Ok(())
 }
 
 fn reveal(window: &WebviewWindow) -> tauri::Result<()> {
@@ -150,28 +149,84 @@ fn reveal(window: &WebviewWindow) -> tauri::Result<()> {
     window.set_focus()
 }
 
-/// Positions a popup of `size` (physical pixels) next to `anchor`, kept inside
-/// the monitor's work area. The size is passed in because the window's own
-/// reported size lags behind a `set_size` call.
-fn place(
-    window: &WebviewWindow,
+/// A monitor's full rectangle and its usable part (without menu bar or
+/// taskbar), in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MonitorArea {
+    full: Rect,
+    work: Rect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Rect {
+    left: f64,
+    top: f64,
+    right: f64,
+    bottom: f64,
+}
+
+impl Rect {
+    fn new(position: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> Self {
+        let (left, top) = (f64::from(position.x), f64::from(position.y));
+        Self {
+            left,
+            top,
+            right: left + f64::from(size.width),
+            bottom: top + f64::from(size.height),
+        }
+    }
+
+    fn contains(&self, p: PhysicalPosition<f64>) -> bool {
+        (self.left..self.right).contains(&p.x) && (self.top..self.bottom).contains(&p.y)
+    }
+
+    /// Squared distance from `p` to the rectangle; 0 when inside.
+    fn distance_sq(&self, p: PhysicalPosition<f64>) -> f64 {
+        let dx = (self.left - p.x).max(0.0).max(p.x - self.right);
+        let dy = (self.top - p.y).max(0.0).max(p.y - self.bottom);
+        dx * dx + dy * dy
+    }
+}
+
+impl MonitorArea {
+    fn of(monitor: &Monitor) -> Self {
+        let work = monitor.work_area();
+        Self {
+            full: Rect::new(*monitor.position(), *monitor.size()),
+            work: Rect::new(work.position, work.size),
+        }
+    }
+}
+
+/// Top-left corner for a popup of `size` (physical pixels).
+///
+/// The click is matched against each monitor's *full* rectangle, because a
+/// tray click lands in the menu bar, which is outside the work area. A click
+/// that is on no monitor (coordinate-space mismatches happen with mixed-DPI
+/// setups) goes to the nearest one rather than failing. Without an anchor the
+/// popup goes to the primary monitor's top-right corner.
+fn popup_position(
+    monitors: &[MonitorArea],
+    primary: usize,
     anchor: Option<PhysicalPosition<f64>>,
     size: (f64, f64),
-) -> tauri::Result<()> {
-    let monitor = match anchor {
-        Some(p) => window.monitor_from_point(p.x, p.y)?,
-        None => window.primary_monitor()?,
-    };
-    let Some(monitor) = monitor else {
-        return Ok(());
-    };
+) -> Option<PhysicalPosition<f64>> {
+    let chosen = match anchor {
+        Some(p) => monitors.iter().find(|m| m.full.contains(p)).or_else(|| {
+            monitors
+                .iter()
+                .min_by(|a, b| a.full.distance_sq(p).total_cmp(&b.full.distance_sq(p)))
+        }),
+        None => monitors.get(primary).or_else(|| monitors.first()),
+    }?;
 
     let (w, h) = size;
-    let area = monitor.work_area();
-    let (left, top) = (f64::from(area.position.x), f64::from(area.position.y));
-    let right = left + f64::from(area.size.width);
-    let bottom = top + f64::from(area.size.height);
-
+    let Rect {
+        left,
+        top,
+        right,
+        bottom,
+    } = chosen.work;
     let (x, y) = match anchor {
         // Centre on the click. Open away from the nearer screen edge: the tray
         // is at the top on macOS and most Linux desktops, at the bottom on Windows.
@@ -181,7 +236,141 @@ fn place(
     };
 
     // `max` keeps the clamp bounds ordered when the popup is larger than the area.
-    let x = x.clamp(left + MARGIN, (right - w - MARGIN).max(left + MARGIN));
-    let y = y.clamp(top + MARGIN, (bottom - h - MARGIN).max(top + MARGIN));
-    window.set_position(PhysicalPosition::new(x, y))
+    Some(PhysicalPosition::new(
+        x.clamp(left + MARGIN, (right - w - MARGIN).max(left + MARGIN)),
+        y.clamp(top + MARGIN, (bottom - h - MARGIN).max(top + MARGIN)),
+    ))
+}
+
+/// Positions a popup of `size` (physical pixels) next to `anchor`. The size is
+/// passed in because the window's own reported size lags behind `set_size`.
+fn place(
+    window: &WebviewWindow,
+    anchor: Option<PhysicalPosition<f64>>,
+    size: (f64, f64),
+) -> tauri::Result<()> {
+    let monitors: Vec<_> = window
+        .available_monitors()?
+        .iter()
+        .map(MonitorArea::of)
+        .collect();
+    let primary = window
+        .primary_monitor()?
+        .map(|m| MonitorArea::of(&m))
+        .and_then(|p| monitors.iter().position(|m| *m == p))
+        .unwrap_or(0);
+
+    match popup_position(&monitors, primary, anchor, size) {
+        Some(position) => window.set_position(position),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SIZE: (f64, f64) = (760.0, 1398.0);
+
+    fn area(left: f64, top: f64, width: f64, height: f64, menu_bar: f64) -> MonitorArea {
+        let full = Rect {
+            left,
+            top,
+            right: left + width,
+            bottom: top + height,
+        };
+        MonitorArea {
+            full,
+            work: Rect {
+                top: top + menu_bar,
+                ..full
+            },
+        }
+    }
+
+    /// The two displays of the machine this was debugged on: a 4112x2658
+    /// primary and a 3840x2160 display to its left.
+    fn desk() -> [MonitorArea; 2] {
+        [
+            area(0.0, 0.0, 4112.0, 2658.0, 78.0),
+            area(-3840.0, 0.0, 3840.0, 2160.0, 60.0),
+        ]
+    }
+
+    fn at(x: f64, y: f64) -> Option<PhysicalPosition<f64>> {
+        Some(PhysicalPosition::new(x, y))
+    }
+
+    fn pos(p: Option<PhysicalPosition<f64>>) -> (f64, f64) {
+        let p = p.expect("a position");
+        (p.x, p.y)
+    }
+
+    #[test]
+    fn tray_click_in_the_menu_bar_opens_below_it_centred() {
+        // The click that failed in practice: inside the monitor, above the work area.
+        let p = popup_position(&desk(), 0, at(2544.0, 27.0), SIZE);
+        assert_eq!(pos(p), (2544.0 - 380.0, 86.0));
+    }
+
+    #[test]
+    fn clicks_near_the_right_edge_are_pulled_inside() {
+        let p = popup_position(&desk(), 0, at(4100.0, 27.0), SIZE);
+        assert_eq!(pos(p).0, 4112.0 - 760.0 - MARGIN);
+    }
+
+    #[test]
+    fn a_click_on_the_second_monitor_stays_there() {
+        let p = pos(popup_position(&desk(), 0, at(-1000.0, 20.0), SIZE));
+        assert!((-3840.0..0.0).contains(&p.0), "x = {}", p.0);
+        assert_eq!(p.1, 60.0 + MARGIN);
+    }
+
+    #[test]
+    fn a_click_on_no_monitor_goes_to_the_nearest_one() {
+        // Beyond the right edge of the primary monitor.
+        let p = pos(popup_position(&desk(), 0, at(9000.0, 27.0), SIZE));
+        assert_eq!(p.0, 4112.0 - 760.0 - MARGIN);
+        // Far to the left of the second monitor.
+        let p = pos(popup_position(&desk(), 0, at(-9000.0, 27.0), SIZE));
+        assert_eq!(p.0, -3840.0 + MARGIN);
+    }
+
+    #[test]
+    fn a_taskbar_at_the_bottom_opens_upwards() {
+        let monitors = [area(0.0, 0.0, 1920.0, 1080.0, 0.0)];
+        let p = pos(popup_position(
+            &monitors,
+            0,
+            at(1800.0, 1070.0),
+            (760.0, 600.0),
+        ));
+        assert_eq!(p.1, 1070.0 - 600.0 - MARGIN);
+    }
+
+    #[test]
+    fn without_an_anchor_it_goes_top_right_of_the_primary() {
+        let p = pos(popup_position(&desk(), 0, None, SIZE));
+        assert_eq!(p, (4112.0 - 760.0 - MARGIN, 78.0 + MARGIN));
+        // Another monitor can be primary.
+        let p = pos(popup_position(&desk(), 1, None, SIZE));
+        assert_eq!(p.0, -SIZE.0 - MARGIN);
+    }
+
+    #[test]
+    fn a_popup_taller_than_the_screen_does_not_panic() {
+        let monitors = [area(0.0, 0.0, 800.0, 500.0, 0.0)];
+        let p = pos(popup_position(
+            &monitors,
+            0,
+            at(400.0, 10.0),
+            (900.0, 900.0),
+        ));
+        assert_eq!(p, (MARGIN, MARGIN));
+    }
+
+    #[test]
+    fn no_monitors_means_no_position() {
+        assert!(popup_position(&[], 0, at(1.0, 1.0), SIZE).is_none());
+    }
 }
