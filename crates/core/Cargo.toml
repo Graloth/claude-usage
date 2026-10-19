@@ -8,7 +8,19 @@ edition = "2024"
 rust-version = "1.99"
 
 [dependencies]
+# Default features minus the larger/fatter tz data and inlining knobs. The system
+# zoneinfo is used on Unix, tz data is bundled on Windows (which has none).
+jiff = { version = "0.2.38", default-features = false, features = [
+    "std",
+    "tz-system",
+    "tzdb-bundle-platform",
+    "tzdb-zoneinfo",
+    "tzdb-concatenated",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 ureq = { version = "3.4", features = ["json"] }
+
+[dev-dependencies]
+tempfile = "3.27"

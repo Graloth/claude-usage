@@ -127,6 +127,30 @@ impl Usage {
     }
 }
 
+/// The `/profile` response, reduced to what plan detection needs. Names,
+/// emails and ids are deliberately not modelled, so they are never read.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Profile {
+    pub account: Option<ProfileAccount>,
+    pub organization: Option<ProfileOrganization>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct ProfileAccount {
+    pub has_claude_max: Option<bool>,
+    pub has_claude_pro: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct ProfileOrganization {
+    /// For example `claude_team`.
+    pub organization_type: Option<String>,
+    /// For example `default_claude_max_5x`.
+    pub rate_limit_tier: Option<String>,
+    /// For example `team_tier_1`.
+    pub seat_tier: Option<String>,
+}
+
 pub struct Client {
     agent: ureq::Agent,
 }
@@ -151,9 +175,23 @@ impl Client {
 
     /// Blocking; call from a worker thread, not the UI thread.
     pub fn fetch_usage(&self, creds: &OAuthCredentials) -> Result<Usage, UsageError> {
+        self.get("usage", creds)
+    }
+
+    /// The account and organisation behind the login, for plan detection.
+    /// Blocking, like [`Client::fetch_usage`].
+    pub fn fetch_profile(&self, creds: &OAuthCredentials) -> Result<Profile, UsageError> {
+        self.get("profile", creds)
+    }
+
+    fn get<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        creds: &OAuthCredentials,
+    ) -> Result<T, UsageError> {
         let mut response = self
             .agent
-            .get(format!("{API_BASE}/usage"))
+            .get(format!("{API_BASE}/{path}"))
             .header("Authorization", format!("Bearer {}", creds.access_token()))
             .header("anthropic-beta", OAUTH_BETA)
             .header("Accept", "application/json")
@@ -238,6 +276,54 @@ mod tests {
         );
         assert_eq!(limits[1].percent, 40.0);
         assert_eq!(limits[1].resets_at, None);
+    }
+
+    // Shape of a real `/profile` response (2026-10-19) with every identifying
+    // field removed or replaced.
+    const PROFILE: &str = r#"{
+        "account": {
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "full_name": "Example Person",
+            "display_name": "Example",
+            "email": "person@example.com",
+            "has_claude_max": false,
+            "has_claude_pro": false,
+            "created_at": "2025-01-01T00:00:00Z"
+        },
+        "organization": {
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "name": "Example Org",
+            "organization_type": "claude_team",
+            "billing_type": "stripe_subscription",
+            "rate_limit_tier": "default_claude_max_5x",
+            "seat_tier": "team_tier_1",
+            "has_extra_usage_enabled": false,
+            "subscription_status": "active",
+            "claude_code_trial_ends_at": null
+        },
+        "application": {"uuid": "x", "name": "Claude Code", "slug": "claude-code"},
+        "enabled_plugins": []
+    }"#;
+
+    #[test]
+    fn profile_reads_plan_fields_and_ignores_the_rest() {
+        let profile: Profile = serde_json::from_str(PROFILE).unwrap();
+        let org = profile.organization.unwrap();
+        assert_eq!(org.organization_type.as_deref(), Some("claude_team"));
+        assert_eq!(
+            org.rate_limit_tier.as_deref(),
+            Some("default_claude_max_5x")
+        );
+        assert_eq!(org.seat_tier.as_deref(), Some("team_tier_1"));
+        assert_eq!(profile.account.unwrap().has_claude_max, Some(false));
+    }
+
+    #[test]
+    fn empty_profile_is_valid() {
+        assert_eq!(
+            serde_json::from_str::<Profile>("{}").unwrap(),
+            Profile::default()
+        );
     }
 
     #[test]
