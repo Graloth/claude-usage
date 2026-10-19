@@ -75,20 +75,40 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build and publish
-        id: tauri
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+      # GitHub passes a missing secret as an empty string, and the Tauri
+      # bundler treats a signing variable that is set but empty as "sign with
+      # this certificate" and fails to import it. So the variables are only
+      # exported when the secrets exist; without them the build keeps the
+      # ad-hoc signature from tauri.conf.json (see RELEASING.md).
+      - name: Configure macOS signing
+        if: runner.os == 'macOS'
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS signing and notarisation. All empty until the repository has
-          # an Apple Developer account; the build then falls back to the ad-hoc
-          # signature from tauri.conf.json. See RELEASING.md.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No Apple signing secrets: the app keeps its ad-hoc signature."
+            exit 0
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            value="${!name}"
+            [ -n "$value" ] || continue
+            delimiter="ghadelimiter_$(uuidgen)"
+            printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "$value" "$delimiter" >> "$GITHUB_ENV"
+          done
+          echo "Apple signing secrets found: the app will be signed and notarised."
+
+      - name: Build and publish
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           # Omitting tagName and releaseName makes the action build only.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
