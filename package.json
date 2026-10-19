@@ -1,7 +1,6 @@
 {
   "name": "claude-usage",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@12.9.1",
   "scripts": {

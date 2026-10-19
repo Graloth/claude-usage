@@ -2,6 +2,15 @@
 resolver = "3"
 members = ["src-tauri", "crates/core"]
 
+# The one place the version lives: release.sh bumps it, both crates and the
+# Tauri bundle (which falls back to the Cargo version) follow.
+[workspace.package]
+version = "0.1.0"
+authors = ["Dion Jensen"]
+license = "GPL-2.0-or-later"
+edition = "2024"
+rust-version = "1.99"
+
 # Slim tray app: optimise for size (https://tauri.app/concept/size/).
 [profile.release]
 codegen-units = 1

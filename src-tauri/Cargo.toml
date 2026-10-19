@@ -1,11 +1,11 @@
 [package]
 name = "claude-usage"
-version = "0.1.0"
+version.workspace = true
 description = "Cross-platform tray app showing Claude plan limits and usage"
-authors = ["Dion Jensen"]
-license = "GPL-2.0-or-later"
-edition = "2024"
-rust-version = "1.99"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 # The `_lib` suffix keeps the library name distinct from the binary on Windows,

@@ -1,11 +1,11 @@
 [package]
 name = "claude-usage-core"
-version = "0.1.0"
+version.workspace = true
 description = "Credentials, usage API client and transcript scanning for claude-usage"
-authors = ["Dion Jensen"]
-license = "GPL-2.0-or-later"
-edition = "2024"
-rust-version = "1.99"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 # Default features minus the larger/fatter tz data and inlining knobs. The system

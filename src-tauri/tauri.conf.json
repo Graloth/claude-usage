@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Claude Usage",
-  "version": "0.1.0",
   "identifier": "io.github.graloth.claude-usage",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -26,6 +25,21 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Utility",
+    "shortDescription": "Claude plan limits and usage in your system tray",
+    "longDescription": "A tray app that shows your Claude session and weekly limits, what your Claude Code usage would have cost at API prices, and an activity heatmap.",
+    "copyright": "Copyright (c) Dion Jensen and Jonas Tranberg",
+    "license": "GPL-2.0-or-later",
+    "licenseFile": "../LICENSE",
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }
