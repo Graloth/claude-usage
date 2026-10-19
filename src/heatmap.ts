@@ -96,13 +96,13 @@ function stats(report: ReportView, settings: Settings): HTMLElement {
       ? formatMoney(value, settings.currency, settings.exchange_rate)
       : formatTokens(value);
 
-  const item = (label: string, value: string): HTMLElement =>
-    h("div", "stat", h("span", "muted", label), h("span", "", value));
+  const item = (label: string, value: string, wide = false): HTMLElement =>
+    h("div", `stat${wide ? " wide" : ""}`, h("span", "muted", label), h("span", "", value));
 
   return h(
     "div",
     "stats",
-    item("Busiest day", busiest && metricOf(busiest, metric) > 0 ? `${busiest.date.slice(5)} · ${show(metricOf(busiest, metric))}` : "–"),
+    item("Busiest day", busiest && metricOf(busiest, metric) > 0 ? `${busiest.date.slice(5)} · ${show(metricOf(busiest, metric))}` : "–", true),
     item("Active days", `${report.active_days} of ${report.days}`),
     item("Daily average", show(average)),
     item("Streak", `${report.streak} ${report.streak === 1 ? "day" : "days"}`),

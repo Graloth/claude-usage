@@ -78,15 +78,22 @@ setInterval(() => {
 }, 30_000);
 
 // Tell the Rust side how tall the content is so it can size the window, and
-// show it: the window stays hidden until this first report. Observing only
-// after the first render avoids showing an empty "Loading…" frame.
+// show it: the window stays hidden until this first report.
+//
+// Deliberately not requestAnimationFrame: a webview that is not visible yet
+// pauses it, so the report would never arrive and the popup would only appear
+// after the Rust-side fallback timer. A zero timeout still coalesces bursts.
 const PANEL_BORDER = 2;
-let fitFrame = 0;
+let fitTimer = 0;
 function fitWindow(): void {
-  cancelAnimationFrame(fitFrame);
-  fitFrame = requestAnimationFrame(() => {
-    void invoke("fit_popup", { height: stack.offsetHeight + PANEL_BORDER });
-  });
+  clearTimeout(fitTimer);
+  fitTimer = window.setTimeout(() => {
+    // Round up: content height is fractional, and a window even a fraction of
+    // a pixel too short shows a scrollbar, which narrows the content, rewraps
+    // text, changes the height and starts a resize loop.
+    const height = Math.ceil(stack.getBoundingClientRect().height) + PANEL_BORDER;
+    void invoke("fit_popup", { height });
+  }, 0);
 }
 
 async function main(): Promise<void> {
@@ -107,6 +114,9 @@ async function main(): Promise<void> {
     invoke<ScanSnapshot>("get_scan"),
   ]);
   render();
+  // The first report must not wait for a ResizeObserver callback, which
+  // also needs the page to be rendering.
+  fitWindow();
   new ResizeObserver(fitWindow).observe(stack);
 }
 

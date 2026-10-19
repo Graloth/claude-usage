@@ -33,6 +33,8 @@ export function formatMoney(usd: number, currency: Currency, rate: number): stri
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
+    // "$" rather than "US$" in non-US locales.
+    currencyDisplay: "narrowSymbol",
     // Cents matter for small amounts, not for hundreds.
     maximumFractionDigits: Math.abs(value) >= 100 ? 0 : 2,
   }).format(value);

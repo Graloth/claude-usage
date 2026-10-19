@@ -15,6 +15,11 @@
   line-height: 1.5;
 }
 
+/* Component rules such as `display: grid` must not defeat the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 /* The window is transparent; the rounded panel below is what you see. */
 html,
 body {
@@ -383,4 +388,10 @@ button.tab.active {
 .stat {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+}
+
+/* The busiest-day text is long: give it a row of its own. */
+.stat.wide {
+  grid-column: 1 / -1;
 }
